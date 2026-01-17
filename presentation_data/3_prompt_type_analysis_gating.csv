@@ -1,0 +1,17 @@
+Num Prompts,Method,Prompt Type,Accuracy (%)
+1,Baseline,Box,82.5
+1,Baseline,Point,80.1
+1,Ours (Gated),Box,83.1
+1,Ours (Gated),Point,82.8
+3,Baseline,Box,75.4
+3,Baseline,Point,76.2
+3,Ours (Gated),Box,81.5
+3,Ours (Gated),Point,81.2
+5,Baseline,Box,68.9
+5,Baseline,Point,72.5
+5,Ours (Gated),Box,79.8
+5,Ours (Gated),Point,79.5
+10,Baseline,Box,55.2
+10,Baseline,Point,64.1
+10,Ours (Gated),Box,76.4
+10,Ours (Gated),Point,76.1

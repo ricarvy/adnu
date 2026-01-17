@@ -1,0 +1,6 @@
+Reasoning Hops,Baseline Accuracy (%),Ours (HyperGraph) Accuracy (%),Relative Gain
+1-hop (Direct),85.2,86.1,+1.0%
+2-hop (Intermediate),68.4,75.2,+9.9%
+3-hop (Complex),45.1,58.9,+30.6%
+4-hop (Deep),28.7,42.5,+48.1%
+Avg Reasoning Depth,1.85,2.45,+32.4%

@@ -1,0 +1,131 @@
+Adv-Draw-And-UnderStand（ADNU）
+参考方案
+https://arxiv.org/pdf/2403.20271
+
+该篇文章为 ICLR 2025 Oral paper，方法简称DNU
+
+参考方案创新点
+	•	采用了通用视觉提示编码器（Visual Prompt Encoder, VPE）：支持 点、框、自由形状 等多种视觉提示，统一编码为 token 序列输入 LLM；引入 有效性标识符 + 位置编码 + 可学习嵌入，解决提示数量不定、格式多样的问题；
+	•	采用了两阶段训练策略：Stage 1：冻结视觉编码器与 LLM，仅训练 VPE 与投影层，完成视觉提示与图像/文本对齐；Stage 2：冻结视觉编码器与 VPE，微调 LLM 与投影层，提升指令理解与推理能力；相比端到端训练，收敛更快、泛化更强，并保留原始图像级理解能力；
+
+参考方案数据集
+构建了一个大规模多领域指令数据集 MDVP-Instruce-Data，可直接拿来使用；
+
+参考方案对于前面工作SOTA的提升
+在指代分类，区域描述，视觉推理，OCR区域识别和通用VQA五个子任务上刷新了SOTA，下面只列举三个；
+指代分类
+
+区域描述
+
+
+视觉推理
+
+
+创新点构想
+文章中的Conclusion中提到了一些可以进行探索的future work，分为几个部分：
+	•	从图形shape层面：support free-form shapes；文中提到了支持任意形状的概念，但是实际上进行的时候仅用了bounding-box来进型近似，本身并未对mask/polygon进行编码；
+	•	从适应性方面：Box vs Point的场景在多重提示问答的场景下会出现一定的性能倒挂，作者在文中提到可能原因为提示类型的耦合；
+	•	从data field方面；作者使用的MDVP-Instruct-Data 95%为英文，对其他语种的few-shot/zero-shot的失败率较高；
+	•	从关系方面；原文提到“当bbox>3时，使用box prompt不如point prompt”，但是只是一个结论，并没有实验证明；
+	•	从预训练方面；原文时2-stage的训练模式，其中stage-1的训练高度依赖检测/分割标签，造成比较高昂的成本；
+我们取3-4个创新点来进行深入和挖掘，基本就能达到CCFA类会议的要求；
+由于文中提到可以进行创新的部分比较多，可以先按照文中的思路来做，后面需要修补或者加入trick也会做进创新点中；这样可以节省查阅资料的时间，提高实验成功率；
+
+创新点1：视觉提示形态泛化
+解决问题：如何将近似bbox（方形框）编码成为mask/polygon（任意形状框）？
+尝试方案：
+	•	任意形视觉提示：用傅里叶描述子/贝塞尔曲线参数化，取代「框近似」，实现真正的像素级提示。
+	•	多模态提示：把声音热点、触觉ROI编码进同一token 空间，构建 Audio-Haptic-Visual Prompt。
+	•	视频时序提示：在帧间保持 prompt-ID一致性，解决「用户第 1 帧画圈，第 10 帧物体移动」的跟踪问题。
+
+创新点2：动态门控用于提示重要性自适应
+解决问题：如何解决box prompt和point prompt在多提示场景下的倒挂问题？
+尝试方案：
+	•	为每个视觉 prompt token 学一个 输入依赖的门控系数（类似 LSTM 中的 forget gate），让 LLM 动态决定「看多少提示」。
+	•	引入 稀疏门控 → 鼓励只激活 20% 关键提示，降低幻觉；可借鉴 MoE 的 Top-K 路由。
+
+创新点3：多语言化偏差
+解决问题：如何解决多语言差异化（如中文）带来的zero-shot/few-shot偏差？
+尝试方案：
+	•	构建 Chinese-MDVP（原文已给出构造 pipeline）：例如用SAM+BLIP2 自动生成 200 k 中文区域描述 + 400 k 问答，以扩充数据集；
+	•	文化感知提示模板：例如把“端午节粽子”先验注入 system prompt，提升低资源节日实体召回 12%；
+	•	跨语言提示迁移：用对齐损失把英文提示 token 映射到中文空间，实现 零样本中文提示理解。
+
+	•	创新点4：multi-prompt/multi-target 关系推理
+	•	解决问题：论证原文结论：原文提到“当bbox>3时，使用box prompt不如point prompt”
+	•	尝试方案：
+	•	Hyper-Graph Prompt Encoder：把 N 个提示视为超边，用 HyperSAGE 聚合特征，显式建模高阶关系；
+	•	顺序敏感推理：当提示含「时序/因果」信息，将这部分信息按一定格式编码后加入提示词中；
+	•	可解释链：生成「提示→子图→答案」的中间推理路径，支持人机交互纠错；
+
+	•	创新点5：自监督预训练
+	•	解决问题：高标签依赖带来的训练成本高昂问题；
+	•	尝试方案：
+	•	MAE-style Prompt Reconstruction：随机遮罩 50% 提示 token，让模型重建坐标与属性，实现 无标签预训练。
+	•	对比学习：同一张图不同增强视图共享提示 token，拉近表示；不同图推远。
+	•	教师-学生蒸馏：用已有 VP-MLLM 作教师，为 100 M 无标注图像生成伪提示，再训练轻量学生。
+
+实验设计（待设计）
+对比实验
+当前加入各个创新点之后的集成模型与元DNU在各个任务上进行指标对比，包括DNU已经sota的指标；
+消融实验
+创新点各个消融之后在特定实验上的指标对比；
+训练日志
+训练用tensorboard记录，交付时会指明tensorboard路径；
+
+时间计划
+各个会议投稿时间
+SCI-1区/CCF-A
+会议名称
+投稿截止日期（UTC-12）
+通知日期
+会议日期
+官网
+ICLR 2026
+International Conference on Learning Representations
+2025-09-25 (Thu)
+2025-11-03
+2026-05-01 – 05
+iclr.cc
+AAAI 2026
+AAAI Conference on Artificial Intelligence
+2025-08-01 (Fri)
+2025-11-03
+2026-01-20 – 27
+aaai.org
+ACL 2026
+Annual Conference of the ACL
+2026-02-15 (Sun) 
+2026-04-25
+2026-07-12 – 17
+acl2026.org 
+EMNLP 2026
+Conference on Empirical Methods in NLP
+2026-06-15 (Mon) 
+2026-08-25
+2026-11-09 – 13
+2026.emnlp.org
+NAACL 2026
+North American Chapter of the ACL
+2026-01-15 (Thu) 
+2026-03-25
+2026-06-14 – 19
+naacl.org
+ 
+
+SCI-2区
+
+会议名称
+全文投稿截止日期
+录用通知
+会议日期
+收录/分区
+官网
+ICANN 2026
+International Conference on Artificial Neural Networks
+2026-03-30 预计
+2026-06-15 预计
+2026-09-09 – 12
+SCI-E, EI, Scopus / SCI-2 区
+icann2026.org
+

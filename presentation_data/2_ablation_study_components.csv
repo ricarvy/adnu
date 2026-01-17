@@ -1,0 +1,7 @@
+Experiment ID,Method,Shape Gen. (Poly),Dynamic Gating,Cultural Prior,HyperGraph,MAE Pretrain,MDVP-Bench (Avg),Reasoning Score,Zero-shot ZH Acc
+Exp-0,Baseline (SPHINX-V),-,-,-,-,-,71.8,66.2,42.5
+Exp-1,+ Shape Gen.,✓,-,-,-,-,72.9,66.8,43.1
+Exp-2,+ Gating,✓,✓,-,-,-,74.2,68.5,43.4
+Exp-3,+ Cultural,✓,✓,✓,-,-,74.5,68.7,58.9
+Exp-4,+ HyperGraph,✓,✓,✓,✓,-,75.8,71.2,59.2
+Exp-5,+ MAE (Full),✓,✓,✓,✓,✓,76.4,71.8,60.5

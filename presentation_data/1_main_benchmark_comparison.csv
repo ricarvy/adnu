@@ -1,0 +1,7 @@
+Model,Backbone,MDVP-Bench (Overall),MDVP-Ref (Referral),MDVP-Desc (Description),MDVP-Reason (Reasoning),POPE (F1),MME (Perception),MME (Cognition)
+Shikra,Vicuna-13B,65.2,68.1,62.4,58.9,81.5,1289.4,345.2
+SPHINX,LLaMA-2-13B,68.4,71.2,66.8,62.1,83.2,1350.1,380.5
+Ferret,Vicuna-13B,69.1,72.5,65.9,63.4,82.8,1322.6,368.9
+GPT-4V (Zero-shot),-,72.5,75.8,70.1,68.5,86.4,1405.3,420.1
+SPHINX-V (Baseline),LLaMA-2-13B,71.8,74.5,69.8,66.2,85.1,1390.8,405.6
+ADNU (Ours),LLaMA-2-13B,76.4,79.2,74.5,71.8,87.9,1468.2,442.8

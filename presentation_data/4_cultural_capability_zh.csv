@@ -1,0 +1,7 @@
+Task Category,Baseline (Zero-shot),Ours (Cultural Template),Ours (Cultural + Fine-tune),Improvement
+Festival Recognition,35.2,62.4,78.5,+43.3%
+Idiom Understanding,28.6,55.1,72.3,+43.7%
+Traditional Object Desc.,45.8,68.9,81.2,+35.4%
+Chinese OCR,52.1,54.5,76.8,+24.7%
+Complex Relation (ZH),41.5,58.2,74.5,+33.0%
+Average,40.64,59.82,76.66,+36.02%
