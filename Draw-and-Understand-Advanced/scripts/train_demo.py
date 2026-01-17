@@ -16,6 +16,12 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from accessory.model.sphinx_v_advanced import SphinxVAdvanced
 from accessory.model.mae_wrapper import MAEPromptReconstruction
 from accessory.data.dataset_mock import MockDataset, collate_fn
+from accessory.model.gating import (
+    PromptGating,
+    GumbelGating,
+    HierarchicalGating,
+    MultiHeadPromptGating,
+)
 
 
 class MockLLaMA(nn.Module):
@@ -82,14 +88,35 @@ class MockVisualEncoder(nn.Module):
         return x.unsqueeze(1)
 
 
-def train() -> None:
-    """Run a short synthetic training loop for regression testing."""
-    print("Initializing Draw-and-Understand Advanced Model...")
+def run_single_experiment(
+    experiment_name: str,
+    use_hypergraph: bool,
+    gating_name: str,
+) -> None:
+    print(f"Initializing experiment: {experiment_name}")
     embed_dim = 128
 
     llama = MockLLaMA(hidden_size=embed_dim)
     visual_encoder = MockVisualEncoder(embed_dim=embed_dim)
-    model = SphinxVAdvanced(llama, visual_encoder, embed_dim=embed_dim)
+
+    if gating_name == "prompt":
+        gating_module = PromptGating(embed_dim=embed_dim)
+    elif gating_name == "gumbel":
+        gating_module = GumbelGating(embed_dim=embed_dim)
+    elif gating_name == "hierarchical":
+        gating_module = HierarchicalGating(embed_dim=embed_dim)
+    elif gating_name == "multihead":
+        gating_module = MultiHeadPromptGating(embed_dim=embed_dim)
+    else:
+        raise ValueError(f"Unknown gating_name: {gating_name}")
+
+    model = SphinxVAdvanced(
+        llama,
+        visual_encoder,
+        embed_dim=embed_dim,
+        gating=gating_module,
+        use_hypergraph=use_hypergraph,
+    )
 
     mae_model = MAEPromptReconstruction(model.vp_encoder, decoder_dim=embed_dim // 2)
 
@@ -98,7 +125,6 @@ def train() -> None:
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
-    print("Starting Training Loop Demo...")
     model.train()
 
     for i, (images, prompts, prompt_types, incidence_matrix) in enumerate(dataloader):
@@ -108,10 +134,13 @@ def train() -> None:
             images=images,
             prompts=prompts,
             prompt_types=prompt_types,
-            incidence_matrix=incidence_matrix,
+            incidence_matrix=incidence_matrix if use_hypergraph else None,
         )
 
-        llm_loss = output.loss if output.loss is not None else importance_scores.mean() * 0.01
+        if output.loss is not None:
+            llm_loss = output.loss
+        else:
+            llm_loss = importance_scores.mean() * 0.01
 
         mae_loss, _ = mae_model(prompts, prompt_types)
 
@@ -119,7 +148,20 @@ def train() -> None:
         total_loss.backward()
         optimizer.step()
 
-        print(f"Batch {i}: total_loss={total_loss.item():.4f}")
+        print(f"[{experiment_name}] Batch {i}: total_loss={total_loss.item():.4f}")
+
+
+def train() -> None:
+    print("Starting ADNU structural training demo with multiple experiments...")
+
+    experiments = [
+        ("baseline_full", True, "prompt"),
+        ("no_hypergraph", False, "prompt"),
+        ("multihead_gating", True, "multihead"),
+    ]
+
+    for name, use_hg, gating_name in experiments:
+        run_single_experiment(name, use_hg, gating_name)
 
 
 if __name__ == "__main__":

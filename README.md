@@ -140,7 +140,11 @@ ADNU 在保持 SPHINX-V 整体结构与调用方式兼容的前提下，引入 5
   - [accessory/model/gating.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/model/gating.py)
   - [accessory/model/hypergraph.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/model/hypergraph.py)
   - [accessory/model/mae_wrapper.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/model/mae_wrapper.py)
+  - [accessory/model/losses.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/model/losses.py)
   - [accessory/model/sphinx_v_advanced.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/model/sphinx_v_advanced.py)
+- 工具与实验
+  - [accessory/utils/visualization.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/utils/visualization.py)
+  - [experimental/rl_optimizer.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/experimental/rl_optimizer.py)
 - 数据与模板
   - [accessory/data/dataset_mock.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/data/dataset_mock.py)
   - [accessory/data/template.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/data/template.py)
@@ -363,78 +367,56 @@ Advanced 中的 `HyperGraphPromptEncoder` 被用作独立模块，同时其思�
       - 对应在 Chinese-MDVP 子集上是否使用 `CulturalPromptTemplate` 的性能差异。
     - `5_hypergraph_reasoning_depth.csv`：  
       - 基于 HyperGraph 提示编码的 multi-hop 推理表现，对应 `HyperGraphPromptEncoder` 及其在原 `llama_ens5_vp` 中的 IoU 超图实现。
-    - `6_training_efficiency_mae.csv`：  
-      - 比较是否启用 MAE 自监督（`use_adnu_mae`）条件下，训练 epoch–性能曲线的差异。
 
-这些 CSV 在本仓库中以“已整理的实验结果”形式存在，便于直接用于 PPT / 论文绘图；对应的数值来源都是通过原 Draw-and-Understand 训练 / 评估流程 + ADNU 模块配置组合得到。
+### 2.9 实验性模块：强化学习提示选择器（RL Prompt Selector）
 
----
+- 实现位置：  
+  [experimental/rl_optimizer.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/experimental/rl_optimizer.py)
 
-## 3. 原项目 vs ADNU：实现层面对比
+- 核心类：`RLPromptSelector`
 
-下表与要点总结便于向导师说明“我们到底改了什么”。
+  ```python
+  class RLPromptSelector:
+      def __init__(self, embed_dim: int, learning_rate: float = 1e-3):
+          self.policy = PromptPolicyNetwork(embed_dim)
+          self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate)
+          self.gamma = 0.99
+  ```
 
-### 3.1 架构与模块对比
+  - 作用：
+    - 探索使用 Policy Gradient (REINFORCE) 来动态选择最佳提示组合，而非仅依赖静态的 Gating 权重。
+    - 该模块独立于主训练流，作为后续工作（Future Work）的探索方向。
 
-| 维度 | 原 Draw-and-Understand (SPHINX-V) | Draw-and-Understand-Advanced (ADNU) |
-| --- | --- | --- |
-| 视觉主干 | Q-Former + CLIP + ConvNeXt-XXL + DINOv2（均已在 `llama_ens5_vp` 中实现） | 复用原视觉主干，不做结构性变更 |
-| 视觉提示形式 | 点 / 框（SAM PromptEncoder） | 点 / 框 / 多边形 + 傅里叶描述符 |
-| 提示权重机制 | 所有提示同权重，仅依靠 Transformer 自行学习 | 动态门控（scores + Top-K）显式筛选有效提示 |
-| 提示间关系 | 只通过自注意力间接建模 | 显式 HyperGraph 消息传递（IoU 构图 + GRU 更新） |
-| 文化与多语言 | 无专门模块 | `CulturalPromptTemplate` 注入文化先验与语言特定模板 |
-| 训练目标 | 纯监督 CE（多任务混合） | CE + 可选 MAE 自监督（提示重建） |
-| 与原 pipeline 兼容性 | 官方实现 | 通过在 `llama_ens5_vp` 内添加配置开关，与原训练 / 评估脚本完全兼容 |
+### 2.10 辅助损失函数（Auxiliary Losses）
 
-### 3.2 代码组织与调用流程对比
+- 实现位置：  
+  [accessory/model/losses.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/model/losses.py)
 
-- **原项目**
-  - 高层入口：`SPHINX_V_Model.generate_response` → `MetaModel.generate` → `llama_ens5_vp.Transformer.forward_inference`。
-  - 视觉提示编码：
-    - `Transform_Visual_Prompts` 将原始标注转为 `(N, 4)` 的 `sparse_vp`。
-    - `PromptEncoder` + `encode_visual_prompt` 生成提示 token。
-  - 训练 / 评估：
-    - 通过 YAML + shell 脚本配置数据与 checkpoint 路径。
-    - 多任务评估入口集中在 `accessory/eval`。
+- 核心类：
+  - `InfoNCELoss`：用于拉近同一对象不同形态（如点与框）提示在潜在空间的距离。
+  - `TopologicalConsistencyLoss`：强制特征相似度矩阵与 IoU 空间重叠矩阵对齐，保证超图结构的几何一致性。
+  - `SparsityLoss`：对 Gating 分数施加 KL 散度约束，鼓励稀疏选择。
 
-- **ADNU 改进**
-  - 在 **不修改调用接口** 的前提下，只修改内部实现：
-    - 在 `llama_ens5_vp.ModelArgs` 中新增 ADNU 配置字段。
-    - 在 `Transformer.__init__` 中根据配置实例化 Gating / HyperGraph / MAE 模块。
-    - 在 `encode_visual_prompt` 中嵌入 Gating + HyperGraph 流程。
-    - 在 `forward` 中增加 MAE loss 分支，并通过 `MetaModel` 的 `additional_loss` 向外暴露。
-  - 在 Advanced 目录中，则以更“模块化”的方式提供同样的功能：
-    - `SphinxVAdvanced` 作为可嵌入任意 LLaMA + visual encoder 的高层封装；
-    - `train_demo.py` 作为 regression 测试脚本，用于验证模块组合在小模型上的工作情况。
+### 2.11 可视化工具（Visualization Tools）
 
-### 3.3 与 presentation_data 的关联（实验视角）
+- 实现位置：  
+  [accessory/utils/visualization.py](file:///e:/E_Projects/TraeProject/adnu/draw-and-understand-advanced/accessory/utils/visualization.py)
 
-整理视角如下：
-
-- 论文主结果（`1_main_benchmark_comparison.csv`）
-  - 来自原 SPHINX-V 与开启 ADNU 模块后的 SPHINX-V，在 MDVP-Bench 上的比较。
-  - 对应代码路径：
-    - 模型：`llama_ens5_vp.Transformer` + ADNU 扩展。
-    - 评估：`accessory/eval/MDVP-Bench`。
-
-- 消融实验（`2_ablation_study_components.csv`）
-  - 通过不同 `use_adnu_*` 组合开关，对应关闭 / 开启各个模块。
-
-- 动态门控分析（`3_prompt_type_analysis_gating.csv`）
-  - 对齐论文中“Box 多了会变差”的现象，通过 Gating 后恢复单调性。
-
-- 文化能力（`4_cultural_capability_zh.csv`）
-  - 通过 `CulturalPromptTemplate` 对问句做前缀 / 注入，对 Chinese-MDVP 子集进行前后对比。
-
-- 超图推理深度（`5_hypergraph_reasoning_depth.csv`）
-  - 对比开启 / 关闭 HyperGraph 时，在 1-hop vs 3-hop / 4-hop 场景下的准确率。
-
-- 训练效率（`6_training_efficiency_mae.csv`）
-  - 对比开启 / 关闭 MAE 自监督时，epoch–性能曲线差异。
-
-这些数据文件配合本 README 提供的代码定位，可以直接用于向导师展示“从论文设计 → 代码实现 → 指标提升”的完整闭环。
+- 核心类：`Visualizer`
+  - 提供 `plot_hypergraph`（绘制二部图结构的超图）、`plot_gating_distribution`（门控分数直方图）、`plot_attention_map`（注意力热力图）等方法。
+  - 用于在论文实验部分生成定性分析图表。
 
 ---
 
-如果后续你希望进一步补充内容（例如增加具体命令行示例、对每个实验设定单独小节等），可以在本 README 基础上继续扩展章节，而不需要再重新梳理代码结构与调用路径。**
+## 3. 总结与对比
 
+| 特性 | 原 Draw-and-Understand (SPHINX-V) | ADNU (Advanced Draw-and-Understand) |
+| :--- | :--- | :--- |
+| **视觉提示类型** | Point, Box | Point, Box, **Polygon (with Fourier Desc)** |
+| **多提示融合** | 简单的拼接 / 平均 | **Dynamic Gating (Top-K / Sparse)** |
+| **提示间关系** | 无显式建模 | **HyperGraph (HyperSAGE / HyperGAT)** |
+| **文化适配** | 无 | **Cultural Prompt Template (Festival/Idiom)** |
+| **训练效率** | 依赖全监督 | **MAE Self-Supervised Pre-training** |
+| **代码架构** | 单体大模型耦合 | **模块化组件 + 插件式注入** |
+
+ADNU 通过上述改进，旨在解决原 SPHINX-V 在复杂场景下（如密集目标、多跳推理、特定文化语境）的性能瓶颈，并为后续研究提供了更灵活的实验平台。

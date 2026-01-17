@@ -9,10 +9,11 @@ vision-language backbone:
 
 import torch
 import torch.nn as nn
+from typing import Optional
 
 from .visual_prompt_encoder import VisualPromptEncoder
-from .gating import PromptGating
-from .hypergraph import HyperGraphPromptEncoder
+from .gating import PromptGating, BaseGating
+from .hypergraph import HyperGraphPromptEncoder, BaseHyperGraphEncoder
 
 
 class SphinxVAdvanced(nn.Module):
@@ -24,7 +25,15 @@ class SphinxVAdvanced(nn.Module):
     Draw-and-Understand codebase.
     """
 
-    def __init__(self, llama_model: nn.Module, visual_encoder: nn.Module, embed_dim: int = 4096) -> None:
+    def __init__(
+        self,
+        llama_model: nn.Module,
+        visual_encoder: nn.Module,
+        embed_dim: int = 4096,
+        gating: Optional[BaseGating] = None,
+        hypergraph: Optional[BaseHyperGraphEncoder] = None,
+        use_hypergraph: bool = True,
+    ) -> None:
         """Initialize the advanced SPHINX-V model.
 
         Args:
@@ -40,8 +49,18 @@ class SphinxVAdvanced(nn.Module):
         self.visual_encoder = visual_encoder
 
         self.vp_encoder = VisualPromptEncoder(embed_dim)
-        self.gating = PromptGating(embed_dim)
-        self.hypergraph = HyperGraphPromptEncoder(embed_dim)
+
+        if gating is None:
+            self.gating = PromptGating(embed_dim)
+        else:
+            self.gating = gating
+
+        if not use_hypergraph:
+            self.hypergraph = None
+        elif hypergraph is None:
+            self.hypergraph = HyperGraphPromptEncoder(embed_dim)
+        else:
+            self.hypergraph = hypergraph
 
         self.prompt_to_llm = nn.Linear(embed_dim, llama_model.config.hidden_size)
 
@@ -79,7 +98,7 @@ class SphinxVAdvanced(nn.Module):
 
         gated_feats, importance_scores = self.gating(prompt_feats)
 
-        if incidence_matrix is not None:
+        if incidence_matrix is not None and self.hypergraph is not None:
             gated_feats = self.hypergraph(gated_feats, incidence_matrix)
 
         prompt_tokens = self.prompt_to_llm(gated_feats)
